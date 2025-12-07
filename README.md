@@ -1,73 +1,187 @@
-# React + TypeScript + Vite
+# Minecraft Govee Light Controller
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Control your Govee smart lights based on in-game Minecraft Bedrock events! Your lights will react to time of day, dimension changes, player damage, and more.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 🌙 **Time-based lighting** - Lights change color at night/day
+- 🌋 **Dimension colors** - Different colors for Overworld, Nether, and End
+- ❤️ **Damage feedback** - Lights flash red when you take damage
+- 💀 **Death indicator** - Lights flash on player death
+- 💬 **Chat commands** - Control lights directly from Minecraft chat
 
-## React Compiler
+## Components
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **Minecraft Behavior Pack** (`minecraft-addon/`) - Monitors game events
+2. **Bridge Server** (`server/`) - Receives events and controls Govee lights via API
+3. **Web Dashboard** (`src/`) - React app for manual light control (optional)
 
-## Expanding the ESLint configuration
+## Quick Start
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Minecraft Bedrock Edition (Windows 10/11)
+- Node.js 18+
+- A Govee smart light with API access
+- Govee API key (get one from the Govee app)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### 1. Configure the Bridge Server
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd server
+npm install
+
+# Copy the example config and add your Govee credentials
+cp config.example.json config.json
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Edit `server/config.json` with your Govee API key and device info:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
+```json
+{
+    "govee": {
+        "apiKey": "YOUR_GOVEE_API_KEY_HERE",
+        "deviceId": "YOUR_DEVICE_ID_HERE",
+        "sku": "H6076"
     },
-  },
-])
+    "server": {
+        "httpPort": 3000,
+        "wsPort": 19131
+    }
+}
 ```
+
+### 2. Install the Minecraft Addon
+
+Run the install script to copy the addon to Minecraft:
+
+```powershell
+.\install_addon.ps1
+```
+
+Or manually copy `minecraft-addon/` to:
+```
+%LOCALAPPDATA%\Packages\Microsoft.MinecraftUWP_8wekyb3d8bbwe\LocalState\games\com.mojang\development_behavior_packs\
+```
+
+### 3. Enable the Addon in Your World
+
+1. Open Minecraft Bedrock
+2. Edit your world settings
+3. Go to **Behavior Packs**
+4. Activate **Govee Light Controller**
+5. Enable **Beta APIs** in Experiments (required for Script API)
+
+### 4. Disable Encrypted WebSockets
+
+Minecraft requires encrypted WebSockets by default. You need to disable this:
+
+**Option A: In-game setting**
+1. Go to Settings → General
+2. Find "Require Encrypted Websockets" and turn it OFF
+
+**Option B: Via options file** (may reset when you open settings)
+```powershell
+$optionsFile = "$env:APPDATA\Minecraft Bedrock\Users\*\games\com.mojang\minecraftpe\options.txt"
+(Get-Content $optionsFile) -replace "websocket_encryption:1", "websocket_encryption:0" | Set-Content $optionsFile
+```
+
+### 5. Start the Bridge and Connect
+
+```bash
+cd server
+node bridge.js
+```
+
+In Minecraft (after joining your world):
+```
+/connect localhost:19131
+```
+
+You should see "Connection established" in chat and "[Govee] Bridge connected!" when successful.
+
+## Chat Commands
+
+Type these in Minecraft chat to control your lights:
+
+| Command | Effect |
+|---------|--------|
+| `!red` | Set lights to red |
+| `!green` | Set lights to green |
+| `!blue` | Set lights to blue |
+| `!white` | Set lights to white |
+| `!purple` | Set lights to purple |
+| `!orange` | Set lights to orange |
+| `!on` | Turn lights on |
+| `!off` | Turn lights off |
+
+## Automatic Light Behaviors
+
+| Event | Light Response |
+|-------|----------------|
+| Night time | Blue lighting |
+| Day time | White lighting |
+| Enter Nether | Red/orange glow |
+| Enter End | Purple glow |
+| Player hurt | Red flash (1 sec) |
+| Player death | Red flash (3 sec) |
+| Kill mob | Green flash |
+
+## Troubleshooting
+
+### "Connection closed" in chat
+- Make sure "Require Encrypted Websockets" is disabled in Minecraft settings
+- Ensure the bridge server is running on port 19131
+- Check that no firewall is blocking the connection
+
+### "Encrypted session required" error
+- The encryption setting wasn't disabled. Try changing it in-game under Settings → General
+
+### Addon not appearing in behavior packs
+- Make sure you copied it to `development_behavior_packs` (not `behavior_packs`)
+- Check that the folder structure is correct: `GoveeLightController/manifest.json`
+
+### Lights not responding
+- Verify your Govee API key in `config.json`
+- Check the bridge console for Govee API errors
+- Test the API manually: `curl http://localhost:3000/status`
+
+## API Endpoints
+
+The bridge server exposes these HTTP endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/status` | GET | Get connection status and game state |
+| `/color` | POST | Set light color `{ r, g, b }` |
+| `/command` | POST | Send command to Minecraft `{ command }` |
+| `/govee` | POST | Trigger event `{ type, data }` |
+
+## Project Structure
+
+```
+govee_testbed/
+├── minecraft-addon/          # Minecraft Behavior Pack
+│   ├── manifest.json         # Pack manifest (v4.0.0)
+│   └── scripts/
+│       └── main.js           # Game event handling
+├── server/                   # Bridge server
+│   ├── bridge.js             # Main server (WebSocket + HTTP + Govee API)
+│   ├── config.json           # Your configuration (gitignored)
+│   ├── config.example.json   # Example configuration
+│   └── package.json
+├── src/                      # React web dashboard (optional)
+├── install_addon.ps1         # Addon installation script
+└── README.md
+```
+
+## Getting Your Govee API Key
+
+1. Open the Govee Home app
+2. Go to Profile → Settings → About Us → Apply for API Key
+3. Wait for email with your API key (usually instant)
+4. Find your device ID in the app under device settings
+
+## License
+
+MIT

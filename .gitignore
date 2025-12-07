@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Config files with secrets
+server/config.json
+server/certs/
+
+# Build artifacts
+*.mcpack

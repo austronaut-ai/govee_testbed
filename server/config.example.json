@@ -1,0 +1,11 @@
+{
+    "govee": {
+        "apiKey": "YOUR_GOVEE_API_KEY_HERE",
+        "deviceId": "YOUR_DEVICE_ID_HERE",
+        "sku": "H6076"
+    },
+    "server": {
+        "httpPort": 3000,
+        "wsPort": 19131
+    }
+}

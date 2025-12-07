@@ -1,0 +1,26 @@
+
+{
+    "format_version": 2,
+    "header": {
+        "description": "Controls Govee Lights based on game events (time, dimension, health)",
+        "name": "Govee Controller V4",
+        "uuid": "5f3d5ea7-4f6c-48c3-a3b0-6f2a34ccf8bf",
+        "version": [4, 0, 0],
+        "min_engine_version": [1, 20, 0]
+    },
+    "modules": [
+        {
+            "description": "Script Module",
+            "type": "script",
+            "uuid": "1e8a93b4-52d1-41e7-9da5-3fcb428ea9de",
+            "version": [4, 0, 0],
+            "entry": "scripts/main.js"
+        }
+    ],
+    "dependencies": [
+        {
+            "module_name": "@minecraft/server",
+            "version": "1.16.0"
+        }
+    ]
+}
