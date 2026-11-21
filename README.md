@@ -157,6 +157,27 @@ The bridge server exposes these HTTP endpoints:
 | `/command` | POST | Send command to Minecraft `{ command }` |
 | `/govee` | POST | Trigger event `{ type, data }` |
 
+### Network exposure
+
+The bridge can run game commands as the player and change your lights, so it is
+locked to this machine:
+
+- HTTP and WebSocket servers listen on loopback only (`127.0.0.1` and `::1`).
+  Minecraft runs on the same PC and connects to `localhost`, so nothing on the
+  LAN needs to reach the bridge.
+- Requests must use a loopback `Host` (`localhost`, `127.0.0.1` or `[::1]` with
+  the bridge's port), which blocks DNS-rebinding pages.
+- Requests and WebSocket handshakes that carry a browser `Origin` header are
+  refused with 403. Minecraft's `/connect` client and `curl` send no Origin, so
+  they keep working. No CORS headers are sent. If you build a web page that
+  should call the bridge, add its origin to `server.allowedOrigins` in
+  `config.json` (for example `["http://localhost:5173"]`).
+- POST bodies must be `Content-Type: application/json`.
+
+Ports come from `server.httpPort` / `server.wsPort` in `config.json`, or the
+`BRIDGE_HTTP_PORT` / `BRIDGE_WS_PORT` environment variables. `npm test` in
+`server/` starts the bridge on spare ports and checks these rules.
+
 ## Project Structure
 
 ```

@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors');
+const http = require('http');
 const bodyParser = require('body-parser');
 const fetch = require('node-fetch');
 const WebSocket = require('ws');
@@ -10,11 +10,6 @@ const path = require('path');
 const forge = require('node-forge');
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
-
-const PORT = 3000;
-const WS_PORT = 19131;
 
 // Generate or load SSL certificates
 function getSSLCerts() {
@@ -102,6 +97,48 @@ if (fs.existsSync(configPath)) {
 const GOVEE_API_KEY = process.env.GOVEE_API_KEY || config.govee?.apiKey || '';
 const DEVICE_ID = process.env.GOVEE_DEVICE_ID || config.govee?.deviceId || '';
 const SKU = process.env.GOVEE_SKU || config.govee?.sku || 'H6076';
+
+const PORT = Number(process.env.BRIDGE_HTTP_PORT) || config.server?.httpPort || 3000;
+const WS_PORT = Number(process.env.BRIDGE_WS_PORT) || config.server?.wsPort || 19131;
+
+// ============= REQUEST SOURCE CHECKS =============
+// The bridge can run game commands as the player and change the lights, so it
+// only listens on loopback and refuses anything a web page could send:
+// - Host must be a loopback name (blocks DNS rebinding).
+// - Origin, if present, must be allowlisted. Browsers always send Origin on
+//   cross-site requests and WebSocket handshakes; Minecraft's /connect client
+//   and curl do not. No front-end in this repo calls the bridge, so the
+//   allowlist is empty unless config.server.allowedOrigins adds entries.
+const LOOPBACK_ADDRESSES = ['127.0.0.1', '::1'];
+const LOOPBACK_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'];
+const ALLOWED_ORIGINS = new Set(
+    (config.server?.allowedOrigins || []).map((o) => String(o).toLowerCase())
+);
+
+function isLoopbackHost(hostHeader, port) {
+    const host = String(hostHeader || '').toLowerCase();
+    return LOOPBACK_HOSTNAMES.some((h) => host === `${h}:${port}`);
+}
+
+function isAllowedOrigin(origin) {
+    return origin === undefined || ALLOWED_ORIGINS.has(String(origin).toLowerCase());
+}
+
+app.use((req, res, next) => {
+    if (!isLoopbackHost(req.headers.host, PORT)) {
+        console.warn(`Refused HTTP request with Host: ${req.headers.host}`);
+        return res.status(403).json({ error: 'Forbidden host' });
+    }
+    if (!isAllowedOrigin(req.headers.origin)) {
+        console.warn(`Refused HTTP request from Origin: ${req.headers.origin}`);
+        return res.status(403).json({ error: 'Forbidden origin' });
+    }
+    if (req.method === 'POST' && !req.is('application/json')) {
+        return res.status(415).json({ error: 'Content-Type must be application/json' });
+    }
+    next();
+});
+app.use(bodyParser.json());
 
 // Track game state
 let gameState = {
@@ -246,7 +283,15 @@ async function handleChatCommand(message, sender) {
 
 // ============= WEBSOCKET SERVER =============
 // Using plain WebSocket - Minecraft encryption setting must be disabled in-game
-const wss = new WebSocket.Server({ port: WS_PORT });
+const wss = new WebSocket.Server({
+    noServer: true,
+    // Minecraft's /connect client sends no Origin; a browser page always does.
+    verifyClient: ({ origin }, done) => {
+        if (isAllowedOrigin(origin)) return done(true);
+        console.warn(`Refused WebSocket connection from Origin: ${origin}`);
+        done(false, 403, 'Forbidden origin');
+    }
+});
 let minecraftClient = null;
 
 wss.on('connection', (ws) => {
@@ -363,6 +408,9 @@ app.get('/status', (req, res) => {
 
 app.post('/command', (req, res) => {
     const { command } = req.body;
+    if (typeof command !== 'string' || command.length === 0) {
+        return res.status(400).json({ error: 'command must be a non-empty string' });
+    }
     if (minecraftClient) {
         sendMinecraftCommand(command);
         res.json({ status: 'sent' });
@@ -373,12 +421,50 @@ app.post('/command', (req, res) => {
 
 app.post('/color', async (req, res) => {
     const { r, g, b } = req.body;
+    const isByte = (v) => Number.isInteger(v) && v >= 0 && v <= 255;
+    if (![r, g, b].every(isByte)) {
+        return res.status(400).json({ error: 'r, g and b must be integers 0-255' });
+    }
     await setColor(r, g, b);
     res.json({ status: 'ok' });
 });
 
 // ============= START SERVER =============
-app.listen(PORT, () => {
+// Listen on both IPv4 and IPv6 loopback so `localhost` works whichever one it
+// resolves to, without exposing the bridge to the local network.
+function listenLoopback(port, makeServer, onReady) {
+    let pending = LOOPBACK_ADDRESSES.length;
+    let listening = 0;
+    for (const address of LOOPBACK_ADDRESSES) {
+        const server = makeServer();
+        server.on('error', (err) => {
+            // ::1 may be unavailable (IPv6 disabled); 127.0.0.1 is enough then.
+            if (address === '::1' && (err.code === 'EADDRNOTAVAIL' || err.code === 'EAFNOSUPPORT')) {
+                if (--pending === 0 && listening > 0) onReady();
+                return;
+            }
+            console.error(`Failed to listen on ${address}:${port}:`, err.message);
+            process.exit(1);
+        });
+        server.listen(port, address, () => {
+            listening++;
+            if (--pending === 0) onReady();
+        });
+    }
+}
+
+listenLoopback(WS_PORT, () => {
+    const server = http.createServer((req, res) => {
+        res.writeHead(426, { 'Content-Type': 'text/plain' });
+        res.end('WebSocket only');
+    });
+    server.on('upgrade', (req, socket, head) => {
+        wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    });
+    return server;
+}, () => console.log(`WebSocket listening on loopback port ${WS_PORT}`));
+
+listenLoopback(PORT, () => http.createServer(app), () => {
     console.log('');
     console.log('='.repeat(60));
     console.log('  MINECRAFT GOVEE BRIDGE');
