@@ -188,6 +188,7 @@ govee_testbed/
 │       └── main.js           # Game event handling
 ├── server/                   # Bridge server
 │   ├── bridge.js             # Main server (WebSocket + HTTP + Govee API)
+│   ├── security-check.js     # Tests that web pages cannot drive the bridge (npm test)
 │   ├── config.json           # Your configuration (gitignored)
 │   ├── config.example.json   # Example configuration
 │   └── package.json
